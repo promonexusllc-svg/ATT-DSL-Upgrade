@@ -1,6 +1,6 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
-import { LayoutDashboard, LogOut, Moon, Settings, Sun } from "lucide-react";
+import { LayoutDashboard, LogOut, Moon, Settings, Sun, ClipboardList, Users } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useTheme } from "@/contexts/ThemeContext";
 import { APP_NAME } from "@/lib/constants";
@@ -28,6 +28,12 @@ import {
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/pipeline", label: "My Pipeline", icon: ClipboardList },
+];
+
+// Admin-only nav items
+const adminNavItems = [
+  { href: "/admin/users", label: "Team Management", icon: Users },
 ];
 
 function NavLink({
@@ -57,6 +63,8 @@ function NavLink({
 
 function SidebarNav() {
   const location = useLocation();
+  const userProfile = useQuery(api.users.currentUserProfile);
+  const isAdmin = userProfile?.role === "admin";
 
   return (
     <SidebarContent>
@@ -64,6 +72,15 @@ function SidebarNav() {
         <SidebarGroupContent>
           <SidebarMenu>
             {navItems.map(item => (
+              <NavLink
+                key={item.href}
+                href={item.href}
+                label={item.label}
+                icon={item.icon}
+                isActive={location.pathname === item.href}
+              />
+            ))}
+            {isAdmin && adminNavItems.map(item => (
               <NavLink
                 key={item.href}
                 href={item.href}
