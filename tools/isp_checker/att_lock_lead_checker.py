@@ -84,44 +84,85 @@ ISP_PROVIDERS = {
     },
 }
 
-# Results file location (Desktop)
-DESKTOP = Path.home() / "Desktop"
-RESULTS_FILE = DESKTOP / f"isp_verification_results_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+# Results file location — tries Desktop, falls back to Downloads, then current dir
+def get_results_path():
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M')
+    filename = f"isp_verification_results_{timestamp}.csv"
+    
+    # Try Desktop first (standard and OneDrive)
+    for desktop in [
+        Path.home() / "Desktop",
+        Path.home() / "OneDrive" / "Desktop",
+        Path.home() / "OneDrive - Business Solution Provider" / "Desktop",
+    ]:
+        if desktop.exists():
+            return desktop / filename
+    
+    # Fall back to Downloads
+    downloads = Path.home() / "Downloads"
+    if downloads.exists():
+        return downloads / filename
+    
+    # Last resort: current directory
+    return Path.cwd() / filename
+
+RESULTS_FILE = get_results_path()
 
 # ═══════════════════════════════════════════════════════════════════
 # DATABASE FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════
 
 def fetch_lock_leads():
-    """Fetch all Lock-classified leads from Convex."""
+    """Fetch all Lock-classified leads from Convex (paginated to get ALL)."""
     print("\n📡 Fetching Lock leads from database...")
 
-    # Use Convex HTTP action to query leads
-    url = f"{CONVEX_URL}/api/query"
-    payload = {
-        "path": "leads:list",
-        "args": {
+    all_leads = []
+    cursor = None
+    page = 1
+
+    while True:
+        url = f"{CONVEX_URL}/api/query"
+        args = {
             "heatClassification": "Lock",
             "sortBy": "recommended",
             "showClosed": False,
         }
-    }
+        if cursor:
+            args["cursor"] = cursor
 
-    try:
-        resp = requests.post(url, json=payload, timeout=30)
-        if resp.status_code == 200:
-            data = resp.json()
-            leads = data.get("value", {}).get("leads", [])
-            print(f"✅ Found {len(leads)} Lock leads")
-            return leads
-        else:
-            print(f"⚠️  API returned status {resp.status_code}")
+        payload = {"path": "leads:list", "args": args}
+
+        try:
+            resp = requests.post(url, json=payload, timeout=30)
+            if resp.status_code == 200:
+                data = resp.json()
+                value = data.get("value", {})
+                leads = value.get("leads", [])
+                all_leads.extend(leads)
+                print(f"   Page {page}: fetched {len(leads)} leads (total: {len(all_leads)})")
+
+                # Check if there are more pages
+                next_cursor = value.get("nextCursor")
+                if next_cursor and len(leads) > 0:
+                    cursor = next_cursor
+                    page += 1
+                else:
+                    break
+            else:
+                print(f"⚠️  API returned status {resp.status_code}")
+                if all_leads:
+                    break
+                print("   Falling back to local CSV method...")
+                return None
+        except Exception as e:
+            print(f"⚠️  Could not reach database: {e}")
+            if all_leads:
+                break
             print("   Falling back to local CSV method...")
             return None
-    except Exception as e:
-        print(f"⚠️  Could not reach database: {e}")
-        print("   Falling back to local CSV method...")
-        return None
+
+    print(f"✅ Found {len(all_leads)} Lock leads total")
+    return all_leads
 
 
 def load_leads_from_csv():
