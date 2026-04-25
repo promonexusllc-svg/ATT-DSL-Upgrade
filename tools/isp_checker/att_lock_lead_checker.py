@@ -36,12 +36,17 @@ try:
     from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
-    from selenium.common.exceptions import TimeoutException, NoSuchElementException
+    from selenium.common.exceptions import TimeoutException, NoSuchElementException, ElementNotInteractableException, WebDriverException
     from webdriver_manager.chrome import ChromeDriverManager
 except ImportError:
     print("\n❌ Missing required packages. Run this command first:")
     print("   pip install selenium webdriver-manager requests\n")
     sys.exit(1)
+
+# Suppress noisy selenium/urllib3 warnings
+import logging
+logging.getLogger('selenium').setLevel(logging.CRITICAL)
+logging.getLogger('urllib3').setLevel(logging.CRITICAL)
 
 try:
     import requests
@@ -582,14 +587,29 @@ def main():
                 provider_info = ISP_PROVIDERS[provider_key]
                 print(f"\n  {provider_info['icon']} Checking {provider_info['name']}...")
 
-                # Auto-fill the address
-                check_fn = ISP_CHECK_FUNCTIONS.get(provider_key)
-                if check_fn:
-                    success = check_fn(driver, full_address, wait)
-                    if success:
-                        print(f"    ✅ Address auto-filled — waiting for page to load...")
-                    else:
-                        print(f"    📋 Address is on clipboard — paste it manually")
+                # Auto-fill the address (crash-proof — any error falls back to clipboard)
+                try:
+                    check_fn = ISP_CHECK_FUNCTIONS.get(provider_key)
+                    if check_fn:
+                        success = check_fn(driver, full_address, wait)
+                        if success:
+                            print(f"    ✅ Address auto-filled — waiting for page to load...")
+                        else:
+                            # Re-copy address to clipboard after failed auto-fill
+                            try:
+                                copy_to_clipboard(driver, full_address)
+                            except Exception:
+                                pass
+                            print(f"    📋 Address is on clipboard — paste it manually")
+                except Exception:
+                    # Auto-fill completely failed — just open the page and let user paste
+                    try:
+                        driver.get(ISP_PROVIDERS[provider_key]["url"])
+                        time.sleep(3)
+                        copy_to_clipboard(driver, full_address)
+                    except Exception:
+                        pass
+                    print(f"    📋 Auto-fill failed — page opened, address on clipboard. Paste manually.")
 
                 # Wait for page to load
                 time.sleep(5)
