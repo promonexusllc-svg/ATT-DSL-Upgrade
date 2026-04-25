@@ -5,6 +5,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { LeadsDashboard } from "./pages/LeadsDashboard";
 import { LeadDetail } from "./pages/LeadDetail";
 import { PipelineDashboard } from "./pages/PipelineDashboard";
+import { AdminUsersPage } from "./pages/AdminUsersPage";
 
 function App() {
   return (
@@ -15,6 +16,7 @@ function App() {
           <Route path="/" element={<LeadsDashboard />} />
           <Route path="/lead/:id" element={<LeadDetail />} />
           <Route path="/pipeline" element={<PipelineDashboard />} />
+          <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </ThemeProvider>
