@@ -28,6 +28,10 @@ interface Lead {
   heatClassification?: string;
   googleBusinessStatus?: string;
   businessStatusOverride?: string;
+  lastRetentionDate?: string;
+  claimedBy?: Id<"users">;
+  claimedByName?: string;
+  claimedAt?: string;
 }
 
 export function HeatBadge({ classification, score, googleBusinessStatus, businessStatusOverride }: { classification?: string; score?: number; googleBusinessStatus?: string; businessStatusOverride?: string }) {
@@ -92,10 +96,43 @@ function getHeatConfig(classification?: string) {
   }
 }
 
+/** Format a date string (e.g. "Dec 1, 2023" or ISO) into a short display */
+function formatRetentionDate(dateStr?: string): string {
+  if (!dateStr) return "—";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr; // return raw if unparseable
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return dateStr;
+  }
+}
+
+/** How many days ago was this date? */
+function daysAgo(dateStr?: string): number | null {
+  if (!dateStr) return null;
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    return Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+  } catch {
+    return null;
+  }
+}
+
+function getRetentionColor(dateStr?: string): string {
+  const days = daysAgo(dateStr);
+  if (days === null) return "text-muted-foreground";
+  if (days > 365) return "text-red-400";       // Over 1 year — stale
+  if (days > 180) return "text-amber-400";      // 6+ months
+  return "text-emerald-400";                     // Recent
+}
+
 export function LeadRow({ lead, onClick }: { lead: Lead; onClick: () => void }) {
   const speedColor = getSpeedColor(lead.speedTier);
   const phoneColor = getPhoneColor(lead.phoneType, lead.hasPots);
   const statusColor = getStatusColor(lead.leadStatus);
+  const retentionColor = getRetentionColor(lead.lastRetentionDate);
 
   return (
     <tr
@@ -119,6 +156,32 @@ export function LeadRow({ lead, onClick }: { lead: Lead; onClick: () => void }) 
       <td className="px-4 py-3 whitespace-nowrap">
         <div className="text-sm">{lead.city}, {lead.state}</div>
         <div className="text-xs text-muted-foreground">{lead.zip}</div>
+      </td>
+
+      {/* Last Retention */}
+      <td className="px-4 py-3 whitespace-nowrap">
+        <div className={`text-sm font-mono ${retentionColor}`}>
+          {formatRetentionDate(lead.lastRetentionDate)}
+        </div>
+        {daysAgo(lead.lastRetentionDate) !== null && (
+          <div className="text-[10px] text-muted-foreground">
+            {daysAgo(lead.lastRetentionDate)}d ago
+          </div>
+        )}
+      </td>
+
+      {/* Claimed By */}
+      <td className="px-4 py-3 whitespace-nowrap">
+        {lead.claimedByName ? (
+          <div className="flex items-center gap-1.5">
+            <div className="h-5 w-5 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">
+              {lead.claimedByName.charAt(0).toUpperCase()}
+            </div>
+            <span className="text-xs text-blue-400 font-medium truncate max-w-[80px]">{lead.claimedByName}</span>
+          </div>
+        ) : (
+          <span className="text-[11px] text-muted-foreground/40">Unclaimed</span>
+        )}
       </td>
 
       {/* Speed Tier */}

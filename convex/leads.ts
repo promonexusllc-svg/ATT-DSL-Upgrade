@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
+import { getAuthUserId } from "@convex-dev/auth/server";
 
 // Get leads with filtering and pagination
 export const list = query({
@@ -65,6 +66,10 @@ export const list = query({
       heatClassification: v.optional(v.string()),
       googleBusinessStatus: v.optional(v.string()),
       businessStatusOverride: v.optional(v.string()),
+      lastRetentionDate: v.optional(v.string()),
+      claimedBy: v.optional(v.id("users")),
+      claimedByName: v.optional(v.string()),
+      claimedAt: v.optional(v.string()),
     })),
     nextCursor: v.union(v.string(), v.null()),
     totalCount: v.number(),
@@ -272,8 +277,121 @@ function mapLead(l: any) {
     heatClassification: l.heatClassification,
     googleBusinessStatus: l.googleBusinessStatus,
     businessStatusOverride: l.businessStatusOverride,
+    // NEW: Retention date + claim fields
+    lastRetentionDate: l.lastRetentionDate,
+    claimedBy: l.claimedBy,
+    claimedByName: l.claimedByName,
+    claimedAt: l.claimedAt,
   };
 }
+
+// ─── Lead Claiming ────────────────────────────────────────────────────────────
+
+// Claim a lead for the currently authenticated user
+export const claimLead = mutation({
+  args: {
+    leadId: v.id("leads"),
+  },
+  returns: v.object({ success: v.boolean(), error: v.optional(v.string()) }),
+  handler: async (ctx, { leadId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const lead = await ctx.db.get(leadId);
+    if (!lead) throw new Error("Lead not found");
+
+    // If already claimed by someone else, block it
+    if (lead.claimedBy && lead.claimedBy !== userId) {
+      return { success: false, error: `Already claimed by ${lead.claimedByName || "another user"}` };
+    }
+    // If already claimed by this user, it's a no-op
+    if (lead.claimedBy === userId) {
+      return { success: true };
+    }
+
+    // Look up user's display name
+    const user = await ctx.db.get(userId);
+    const displayName = user?.name || user?.email || "Unknown";
+
+    await ctx.db.patch(leadId, {
+      claimedBy: userId,
+      claimedByName: displayName,
+      claimedAt: new Date().toISOString(),
+      // Also initialize pipeline status if not set
+      pipelineStatus: lead.pipelineStatus || "no_contact",
+    });
+
+    return { success: true };
+  },
+});
+
+// Unclaim / release a lead (only the claimer or an admin can do this)
+export const unclaimLead = mutation({
+  args: {
+    leadId: v.id("leads"),
+  },
+  returns: v.null(),
+  handler: async (ctx, { leadId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const lead = await ctx.db.get(leadId);
+    if (!lead) throw new Error("Lead not found");
+
+    // Only the claimer (or admin) can release
+    // For now, allow the claimer or if unclaimed
+    if (lead.claimedBy && lead.claimedBy !== userId) {
+      // Check if user is admin
+      const user = await ctx.db.get(userId);
+      if (user?.role !== "admin") {
+        throw new Error("Only the claimer or an admin can release this lead");
+      }
+    }
+
+    await ctx.db.patch(leadId, {
+      claimedBy: undefined,
+      claimedByName: undefined,
+      claimedAt: undefined,
+    });
+
+    return null;
+  },
+});
+
+// Get all leads claimed by the current user (for pipeline)
+export const myClaimedLeads = query({
+  args: {},
+  returns: v.array(v.any()),
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) return [];
+
+    const leads = await ctx.db
+      .query("leads")
+      .withIndex("by_claimedBy", q => q.eq("claimedBy", userId))
+      .collect();
+
+    return leads;
+  },
+});
+
+// ─── Backfill: set lastRetentionDate from woSaleDate for existing leads ──────
+
+export const backfillRetentionDates = internalMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    const leads = await ctx.db.query("leads").collect();
+    let updated = 0;
+    for (const lead of leads) {
+      if (!lead.lastRetentionDate && lead.woSaleDate) {
+        await ctx.db.patch(lead._id, { lastRetentionDate: lead.woSaleDate });
+        updated++;
+      }
+    }
+    return updated;
+  },
+});
 
 // Get filter option counts for the sidebar
 export const filterCounts = query({

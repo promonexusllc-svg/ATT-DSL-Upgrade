@@ -123,6 +123,8 @@ export const seedFromData = internalAction({
           internetType: parsed.internetType,
           tvService: parsed.tvService,
           hasPots: parsed.hasPots,
+          // NEW: Use woSaleDate as the initial lastRetentionDate
+          lastRetentionDate: row.wo_sale_date || undefined,
         };
       });
 

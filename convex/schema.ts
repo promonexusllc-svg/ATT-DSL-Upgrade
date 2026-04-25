@@ -89,6 +89,14 @@ const schema = defineSchema({
     conversionScore: v.optional(v.number()),      // 0-100
     heatClassification: v.optional(v.string()),    // "Lock", "Fire", "Hot", "Warm", "Cold"
 
+    // Retention tracking
+    lastRetentionDate: v.optional(v.string()),    // ISO date string — when this account was last retained
+
+    // Lead claiming — multi-user ownership
+    claimedBy: v.optional(v.id("users")),          // user ID who claimed this lead
+    claimedByName: v.optional(v.string()),          // display name for quick rendering
+    claimedAt: v.optional(v.string()),              // ISO datetime of claim
+
     // Pipeline tracking
     pipelineStatus: v.optional(v.string()),
     lastContactAt: v.optional(v.string()),
@@ -108,6 +116,7 @@ const schema = defineSchema({
     .index("by_heatClassification", ["heatClassification"])
     .index("by_pipelineStatus", ["pipelineStatus"])
     .index("by_nextFollowUp", ["nextFollowUp"])
+    .index("by_claimedBy", ["claimedBy"])
     .searchIndex("search_leads", {
       searchField: "bizName",
       filterFields: ["state", "speedTier", "phoneType", "hasPots", "leadStatus"],
