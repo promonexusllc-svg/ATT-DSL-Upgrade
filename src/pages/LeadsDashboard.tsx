@@ -139,6 +139,7 @@ export function LeadsDashboard() {
       "All Packages", "Rep", "FG Status", "FG Department",
       "AT&T Fiber", "AT&T Air", "ISP Count",
       "Inferred ISP", "ISP Source", "Likely ISP", "ISP Confidence",
+      "Last Retention Date", "Claimed By",
     ];
     const rows = data.leads.map((l: any) => [
       l.bizName, l.customer, l.phone, l.email || "",
@@ -150,6 +151,7 @@ export function LeadsDashboard() {
       l.attAirAvailable === true ? "Yes" : l.attAirAvailable === false ? "No" : "Pending",
       l.ispProviderCount?.toString() || "",
       l.inferredIsp || "", l.inferredIspSource || "", l.likelyIsp || "", l.likelyIspConfidence || "",
+      l.lastRetentionDate || "", l.claimedByName || "",
     ]);
     const csv = [headers.join(","), ...rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -511,6 +513,8 @@ export function LeadsDashboard() {
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Score</th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Business</th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Location</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Last Retention</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Claimed</th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Speed Tier</th>
                   <th className="text-left px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">Phone</th>
                   <th className="text-center px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">AT&T Upgrade</th>
@@ -524,12 +528,12 @@ export function LeadsDashboard() {
                 ))}
                 {data && data.leads.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="text-center py-12 text-muted-foreground">No leads match your filters</td>
+                    <td colSpan={12} className="text-center py-12 text-muted-foreground">No leads match your filters</td>
                   </tr>
                 )}
                 {!data && (
                   <tr>
-                    <td colSpan={10} className="text-center py-12 text-muted-foreground">
+                    <td colSpan={12} className="text-center py-12 text-muted-foreground">
                       <div className="flex items-center justify-center gap-2">
                         <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
                         Loading leads...
@@ -539,6 +543,40 @@ export function LeadsDashboard() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Bottom Pagination */}
+          <div className="hidden md:flex items-center justify-end gap-2 px-4 py-3 border-t border-border/30 bg-muted/10">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!cursor}
+              onClick={() => {
+                const cursorNum = cursor ? parseInt(cursor) : 0;
+                setCursor(cursorNum >= pageSize ? String(cursorNum - pageSize) : undefined);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className="h-7 w-auto px-2"
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Previous {pageSize}
+            </Button>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              {cursor ? parseInt(cursor) + 1 : 1}-{Math.min((cursor ? parseInt(cursor) : 0) + pageSize, data?.totalCount || 0)} of {data?.totalCount || 0}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!data?.nextCursor}
+              onClick={() => {
+                setCursor(data?.nextCursor || undefined);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className="h-7 w-auto px-2"
+            >
+              Next {pageSize}
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
           </div>
 
           {/* Mobile Card List */}
