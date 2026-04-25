@@ -4,6 +4,22 @@ import { v } from "convex/values";
 
 const schema = defineSchema({
   ...authTables,
+  // Extend the auth users table with custom fields for role-based access
+  users: defineTable({
+    // Fields from @convex-dev/auth
+    name: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    image: v.optional(v.string()),
+    emailVerificationTime: v.optional(v.float64()),
+    phoneVerificationTime: v.optional(v.float64()),
+    isAnonymous: v.optional(v.boolean()),
+    // Custom fields
+    role: v.optional(v.string()),           // "admin" | "rep"
+    isApproved: v.optional(v.boolean()),    // whether account is active/approved
+  })
+    .index("email", ["email"])
+    .index("phone", ["phone"]),
 
   leads: defineTable({
     // Original CSV fields
