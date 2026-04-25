@@ -5,7 +5,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { X, Phone, Mail, MapPin, Globe, Zap, ExternalLink, ClipboardList, Building2, TrendingUp, AlertTriangle, Star, MessageSquare } from "lucide-react";
+import { X, Phone, Mail, MapPin, Globe, Zap, ExternalLink, ClipboardList, Building2, TrendingUp, AlertTriangle, Star, MessageSquare, Calendar, UserCheck } from "lucide-react";
 
 export function LeadDetailSheet({
   leadId,
@@ -17,6 +17,9 @@ export function LeadDetailSheet({
   const navigate = useNavigate();
   const lead = useQuery(api.leads.getById, { id: leadId });
   const updateField = useMutation(api.leads.updateField);
+  const currentUser = useQuery(api.users.currentUserProfile);
+  const claimLead = useMutation(api.leads.claimLead);
+  const unclaimLead = useMutation(api.leads.unclaimLead);
 
   if (!lead) {
     return (
@@ -110,30 +113,130 @@ export function LeadDetailSheet({
             </div>
           )}
 
-          {/* Track in Pipeline Button */}
-          <button
-            onClick={() => navigate(`/pipeline?lead=${leadId}`)}
-            className="w-full flex items-center justify-between p-3 rounded-xl bg-blue-600/10 border border-blue-500/20 hover:bg-blue-600/20 active:bg-blue-600/30 transition-colors group"
-          >
-            <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
-                <ClipboardList className="h-4 w-4 text-white" />
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-semibold text-blue-400">Track in Pipeline</p>
-                <p className="text-[10px] text-muted-foreground">Log calls, notes & follow-ups</p>
+          {/* ─── Last Retention Date ─── */}
+          {lead.lastRetentionDate && (
+            <div className="p-3 rounded-xl border border-amber-500/20 bg-amber-500/5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-lg bg-amber-600/20 flex items-center justify-center">
+                    <Calendar className="h-4 w-4 text-amber-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-amber-300">Last Retention Date</p>
+                    <p className="text-[10px] text-muted-foreground">When this account was last retained</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-amber-300">
+                    {(() => {
+                      try {
+                        const d = new Date(lead.lastRetentionDate);
+                        if (isNaN(d.getTime())) return lead.lastRetentionDate;
+                        return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                      } catch { return lead.lastRetentionDate; }
+                    })()}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {(() => {
+                      try {
+                        const d = new Date(lead.lastRetentionDate);
+                        if (isNaN(d.getTime())) return "";
+                        const days = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+                        if (days > 365) return `${Math.floor(days/365)}y ${days%365}d ago — ⚠️ stale`;
+                        if (days > 180) return `${days}d ago — aging`;
+                        return `${days}d ago`;
+                      } catch { return ""; }
+                    })()}
+                  </p>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              {lead.pipelineStatus && lead.pipelineStatus !== "no_contact" && (
-                <Badge className="text-[10px]">{lead.pipelineStatus.replace(/_/g, " ")}</Badge>
-              )}
-              {lead.totalAttempts ? (
-                <span className="text-[10px] text-muted-foreground">{lead.totalAttempts} calls</span>
-              ) : null}
-              <span className="text-muted-foreground group-hover:text-blue-400 transition-colors">→</span>
-            </div>
-          </button>
+          )}
+
+          {/* ─── Claim / Pipeline Button ─── */}
+          {(() => {
+            const isMine = lead.claimedBy && currentUser && lead.claimedBy === currentUser._id;
+            const isClaimed = !!lead.claimedBy;
+            const claimerName = lead.claimedByName || "someone";
+
+            if (isMine) {
+              return (
+                <div className="space-y-2">
+                  <button
+                    onClick={() => navigate(`/pipeline?lead=${leadId}`)}
+                    className="w-full flex items-center justify-between p-3 rounded-xl bg-emerald-600/10 border border-emerald-500/20 hover:bg-emerald-600/20 active:bg-emerald-600/30 transition-colors group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-8 w-8 rounded-lg bg-emerald-600 flex items-center justify-center">
+                        <ClipboardList className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-sm font-semibold text-emerald-400">My Pipeline — Claimed</p>
+                        <p className="text-[10px] text-muted-foreground">Log calls, notes & follow-ups</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {lead.pipelineStatus && lead.pipelineStatus !== "no_contact" && (
+                        <Badge className="text-[10px]">{lead.pipelineStatus.replace(/_/g, " ")}</Badge>
+                      )}
+                      {lead.totalAttempts ? (
+                        <span className="text-[10px] text-muted-foreground">{lead.totalAttempts} calls</span>
+                      ) : null}
+                      <span className="text-muted-foreground group-hover:text-emerald-400 transition-colors">→</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={async () => { await unclaimLead({ leadId }); }}
+                    className="w-full text-center text-[11px] text-muted-foreground hover:text-red-400 transition-colors py-1"
+                  >
+                    Release this lead
+                  </button>
+                </div>
+              );
+            }
+
+            if (isClaimed) {
+              return (
+                <div className="w-full flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-border/40">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center">
+                      <UserCheck className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-muted-foreground">Claimed by {claimerName}</p>
+                      <p className="text-[10px] text-muted-foreground/60">This lead is in another rep's pipeline</p>
+                    </div>
+                  </div>
+                  <div className="h-6 w-6 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">
+                    {claimerName.charAt(0).toUpperCase()}
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <button
+                onClick={async () => {
+                  const result = await claimLead({ leadId });
+                  if (!result.success) {
+                    alert(result.error || "Failed to claim");
+                  }
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-blue-600/10 border border-blue-500/20 hover:bg-blue-600/20 active:bg-blue-600/30 transition-colors group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-lg bg-blue-600 flex items-center justify-center">
+                    <ClipboardList className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-semibold text-blue-400">Claim & Track in Pipeline</p>
+                    <p className="text-[10px] text-muted-foreground">Claim this lead to start working it</p>
+                  </div>
+                </div>
+                <span className="text-muted-foreground group-hover:text-blue-400 transition-colors">→</span>
+              </button>
+            );
+          })()}
 
           {/* Contact */}
           <Section title="Contact">
@@ -472,6 +575,7 @@ export function LeadDetailSheet({
               <div><span className="text-muted-foreground">Status:</span> <span className="capitalize">{lead.leadStatus.replace(/_/g, " ")}</span></div>
               <div><span className="text-muted-foreground">FG Status:</span> {lead.fgStatus || "—"}</div>
               <div><span className="text-muted-foreground">FG Dept:</span> {lead.fgDepartment || "—"}</div>
+              <div><span className="text-muted-foreground">Retention Date:</span> {lead.lastRetentionDate || "—"}</div>
               <div><span className="text-muted-foreground">Rep:</span> {lead.rep || "—"}</div>
               <div><span className="text-muted-foreground">Lead Rep:</span> {lead.leadRep || "—"}</div>
               <div><span className="text-muted-foreground">Calls:</span> {lead.callAttempts}</div>
